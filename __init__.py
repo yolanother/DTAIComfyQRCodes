@@ -1,33 +1,17 @@
-class Example:
-    """
-    A example node
+import qrcode
+from math import ceil
 
-    Class methods
-    -------------
-    INPUT_TYPES (dict): 
-        Tell the main program input parameters of nodes.
+from PIL import ImageOps
+import numpy as np
+import torch
 
-    Attributes
-    ----------
-    RETURN_TYPES (`tuple`): 
-        The type of each element in the output tulple.
-    RETURN_NAMES (`tuple`):
-        Optional: The name of each output in the output tulple.
-    FUNCTION (`str`):
-        The name of the entry-point method. For example, if `FUNCTION = "execute"` then it will run Example().execute()
-    OUTPUT_NODE ([`bool`]):
-        If this node is an output node that outputs a result/image from the graph. The SaveImage node is an example.
-        The backend iterates on these output nodes and tries to execute all their parents if their parent graph is properly connected.
-        Assumed to be False if not present.
-    CATEGORY (`str`):
-        The category the node should appear in the UI.
-    execute(s) -> tuple || None:
-        The entry point method. The name of this method must be the same as the value of property `FUNCTION`.
-        For example, if `FUNCTION = "execute"` then this method's name must be `execute`, if `FUNCTION = "foo"` then it must be `foo`.
-    """
+from custom_nodes.DTGlobalVariables import variables
+
+
+class QrCodeNode:
     def __init__(self):
         pass
-    
+
     @classmethod
     def INPUT_TYPES(s):
         """
@@ -46,50 +30,73 @@ class Example:
         """
         return {
             "required": {
-                "image": ("IMAGE",),
-                "int_field": ("INT", {
-                    "default": 0, 
-                    "min": 0, #Minimum value
-                    "max": 4096, #Maximum value
-                    "step": 64 #Slider's step
-                }),
-                "float_field": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 10.0, "step": 0.01}),
-                "print_to_screen": (["enable", "disable"],),
-                "string_field": ("STRING", {
-                    "multiline": False, #True if you want the field to look like the one on the ClipTextEncode node
-                    "default": "Hello World!"
+                "link": ("STRING", {
+                    "multiline": False,  # True if you want the field to look like the one on the ClipTextEncode node
+                    "default": "https://doubtech.ai",
                 }),
             },
         }
 
     RETURN_TYPES = ("IMAGE",)
-    #RETURN_NAMES = ("image_output_name",)
+    # RETURN_NAMES = ("image_output_name",)
 
-    FUNCTION = "test"
+    FUNCTION = "create_qr_code"
 
-    #OUTPUT_NODE = False
+    # OUTPUT_NODE = False
 
-    CATEGORY = "Example"
+    CATEGORY = "DoubTech/Loaders"
 
-    def test(self, image, string_field, int_field, float_field, print_to_screen):
-        if print_to_screen == "enable":
-            print(f"""Your input contains:
-                string_field aka input text: {string_field}
-                int_field: {int_field}
-                float_field: {float_field}
-            """)
-        #do some processing on the image, in this example I just invert it
-        image = 1.0 - image
+    def create_qr_code(self, link):
+        # Data to encode
+        data = variables.apply(link)
+
+        # Desired size in pixels
+        size = 768
+
+        # Size of the border in blocks
+        border = 5
+
+        # Version of the QR code, could vary depending on the length of data
+        version = 1
+
+        # Number of modules (blocks) based on the version
+        modules = version * 4 + 17
+
+        # Calculate box size so that (box_size * modules + 2 * border * box_size) is close to desired size
+        box_size = ceil(size / (modules + 2 * border))
+
+        qr = qrcode.QRCode(
+            version=version,
+            error_correction=qrcode.constants.ERROR_CORRECT_H,
+            box_size=box_size,
+            border=border,
+        )
+
+        qr.add_data(data)
+        qr.make(fit=True)
+
+        # Generate QR Code
+        i = qr.make_image(fill='black', back_color='white')
+        i = ImageOps.exif_transpose(i)
+        image = i.convert("RGB")
+        image = np.array(image).astype(np.float32) / 255.0
+        image = torch.from_numpy(image)[None,]
+        if 'A' in i.getbands():
+            mask = np.array(i.getchannel('A')).astype(np.float32) / 255.0
+            mask = 1. - torch.from_numpy(mask)
+        else:
+            mask = torch.zeros((64,64), dtype=torch.float32, device="cpu")
+        return (image, mask)
         return (image,)
 
 
 # A dictionary that contains all nodes you want to export with their names
 # NOTE: names should be globally unique
 NODE_CLASS_MAPPINGS = {
-    "Example": Example
+    "QRCode": QrCodeNode,
 }
 
 # A dictionary that contains the friendly/humanly readable titles for the nodes
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "Example": "Example Node"
+    "QRCode": "QR Code"
 }
