@@ -5,7 +5,7 @@ from PIL import ImageOps
 import numpy as np
 import torch
 
-from custom_nodes.DTGlobalVariables import variables
+from custom_nodes.DTAIComfyVariables import variables
 
 
 class QrCodeNode:
